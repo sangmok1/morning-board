@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- 서울시 버스 API(ws.bus.go.kr)는 http 전용 -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">ws.bus.go.kr</domain>
+    </domain-config>
+</network-security-config>

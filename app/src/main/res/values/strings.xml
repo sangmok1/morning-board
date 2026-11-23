@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">아침보드</string>
+    <string name="widget_desc">오늘 날씨·옷차림·버스 도착</string>
+</resources>
