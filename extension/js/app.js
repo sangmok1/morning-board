@@ -1,0 +1,366 @@
+// 메인: 상태 + 렌더 + 틱 + 설정 — Android MainActivity/SettingsActivity 이식
+
+const DOW = ['일', '월', '화', '수', '목', '금', '토'];
+const state = {
+  weather: null, weatherError: null, stops: [],
+  lastBusFetch: 0, lastWeatherFetch: 0, loadingBus: false, loadingWeather: false,
+  updated: '', live: [],
+};
+let backdrop;
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+// ───────── 갱신 로직 ─────────
+async function refreshWeather() {
+  if (state.loadingWeather) return;
+  state.loadingWeather = true;
+  state.lastWeatherFetch = Date.now();
+  const [w, err] = await Board.loadWeather();
+  state.loadingWeather = false;
+  if (w || !state.weather) { state.weather = w; state.weatherError = err; } else state.weatherError = err;
+  if (err === Board.OFFLINE) {
+    const interval = state.weather ? 15 * 60000 : 60000;
+    state.lastWeatherFetch = Date.now() - interval + 5000;
+  }
+  updateMood();
+  renderWeather();
+}
+
+async function refreshBuses() {
+  if (state.loadingBus) return;
+  state.loadingBus = true;
+  state.lastBusFetch = Date.now();
+  const result = await Board.loadBuses();
+  state.loadingBus = false;
+  const offline = result.length && result.every(r => r.error === Board.OFFLINE);
+  if (offline) {
+    state.lastBusFetch = Date.now() - 25000;
+    if (!state.stops.length || state.stops.every(s => s.error)) state.stops = result;
+    state.updated = '인터넷 연결 대기 중…';
+  } else {
+    state.stops = result;
+    state.updated = `버스 ${Board.clock(Date.now())} 갱신`;
+  }
+  renderBuses();
+}
+
+function tick() {
+  const now = Date.now();
+  const d = new Date(now);
+  document.getElementById('clock').textContent =
+    `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  document.getElementById('date').textContent =
+    `${d.getMonth() + 1}월 ${d.getDate()}일 ${DOW[d.getDay()]}요일`;
+  document.getElementById('updated').textContent = state.updated;
+  for (const l of state.live) l.el.textContent = Board.etaShort(l.eta, l.fetchedAt, l.withSec, now);
+  if (now - state.lastBusFetch > 30000) refreshBuses();
+  const wInterval = state.weather ? 15 * 60000 : 60000;
+  if (now - state.lastWeatherFetch > wInterval) refreshWeather();
+}
+
+function updateMood() {
+  backdrop.setMood(state.weather ? moodOf(state.weather.code, state.weather.isDay) : null);
+}
+
+// ───────── 날씨 렌더 ─────────
+function renderWeather() {
+  const card = document.getElementById('weatherCard');
+  card.innerHTML = '';
+  const w = state.weather;
+  if (!w) {
+    card.appendChild(el('div', 'w-empty', state.weatherError || '날씨 불러오는 중…'));
+    return;
+  }
+  const top = el('div', 'w-top');
+  top.appendChild(makeSpriteCanvas(iconFor(w.code, w.isDay), 64, { tile: true }));
+  const col = el('div', 'col');
+  col.appendChild(el('div', 'w-temp', `${Math.round(w.temp)}°`));
+  col.appendChild(el('div', 'w-desc', `${WeatherApi.desc(w.code)} · 체감 ${Math.round(w.feels)}°`));
+  col.appendChild(el('div', 'w-minmax', `최저 ${Math.round(w.min)}° / 최고 ${Math.round(w.max)}° · 강수 ${w.rainProb12h}%`));
+  top.appendChild(col);
+  card.appendChild(top);
+
+  const outfit = WeatherApi.outfit(w);
+  card.appendChild(el('div', 'section-label', '오늘의 옷차림'));
+  const row = el('div', 'outfit-row');
+  for (const item of outfit.items) {
+    const cell = el('div', 'outfit-cell');
+    cell.appendChild(makeSpriteCanvas(item.s, 52, { tile: true }));
+    cell.appendChild(el('div', 'label', item.label));
+    row.appendChild(cell);
+  }
+  const head = el('div', 'outfit-head');
+  head.appendChild(el('div', 'headline', outfit.headline));
+  for (const tip of outfit.tips) head.appendChild(el('div', 'tip', '• ' + tip));
+  if (state.weatherError) { const e = el('div', 'tip', state.weatherError); e.style.color = 'var(--red)'; head.appendChild(e); }
+  row.appendChild(head);
+  card.appendChild(row);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const week = w.week.filter(d => d.date >= today).slice(0, 7);
+  if (week.length) card.appendChild(renderWeek(week, today));
+}
+
+function renderWeek(days, today) {
+  const box = el('div', 'week');
+  box.appendChild(el('div', 'section-label', '주간 날씨'));
+  const row = el('div', 'week-row');
+  const anyRain = days.some(d => d.rainProb >= 30);
+  for (const d of days) {
+    const date = new Date(d.date + 'T00:00:00');
+    const dow = date.getDay();
+    const isToday = d.date === today;
+    const color = isToday ? 'var(--accent)' : dow === 0 ? 'var(--red)' : dow === 6 ? 'var(--blue)' : 'var(--sub)';
+    const cell = el('div', 'week-cell');
+    const lbl = el('div', 'week-dow', isToday ? '오늘' : DOW[dow]); lbl.style.color = color;
+    cell.appendChild(lbl);
+    cell.appendChild(makeSpriteCanvas(iconFor(d.code), 30, { tile: false }));
+    const temps = el('div', 'week-temps');
+    temps.appendChild(el('span', 'week-max', `${Math.round(d.max)}°`));
+    temps.appendChild(el('span', 'week-min', `${Math.round(d.min)}°`));
+    cell.appendChild(temps);
+    if (anyRain) cell.appendChild(el('div', 'week-rain', d.rainProb >= 30 ? `☂ ${d.rainProb}%` : ' '));
+    row.appendChild(cell);
+  }
+  box.appendChild(row);
+  return box;
+}
+
+// ───────── 버스 렌더 ─────────
+function renderBuses() {
+  const list = document.getElementById('busList');
+  list.innerHTML = '';
+  state.live = [];
+  if (!Prefs.apiKey) { list.appendChild(el('div', 'bus-empty', '설정에서 공공데이터포털 API 키를 넣어주세요')); return; }
+  if (!Prefs.stops.length) { list.appendChild(el('div', 'bus-empty', '설정에서 정류장과 버스를 추가하세요')); return; }
+  if (!state.stops.length) { list.appendChild(el('div', 'bus-empty', '버스 정보 불러오는 중…')); return; }
+  const now = Date.now();
+  for (const s of state.stops) {
+    list.appendChild(el('div', 'bus-stopname', `${s.stopName}  ·  ${s.stop.stopNo}`));
+    if (s.error) { list.appendChild(el('div', 'bus-err', s.error)); continue; }
+    if (!s.arrivals.length) {
+      list.appendChild(el('div', 'bus-empty', s.stop.routes.length ? `${s.stop.routes.join(', ')} 도착 정보 없음` : '도착 예정 버스 없음'));
+      continue;
+    }
+    for (const a of s.arrivals) list.appendChild(busRow(a, s.fetchedAt, now));
+  }
+}
+
+function busRow(a, fetchedAt, now) {
+  const row = el('div', 'bus-row');
+  const route = el('div', 'bus-route');
+  route.appendChild(el('div', 'no', a.route));
+  if (a.dest) route.appendChild(el('div', 'dest', a.dest));
+  row.appendChild(route);
+
+  const eta = el('div', 'bus-eta');
+  if (!a.first) eta.appendChild(el('div', 'main none', '도착 정보 없음'));
+  else {
+    const main = el('div', 'main', Board.etaShort(a.first, fetchedAt, true, now));
+    eta.appendChild(main);
+    state.live.push({ el: main, eta: a.first, fetchedAt, withSec: true });
+  }
+  const sub = [Board.etaClock(a.first, fetchedAt) && Board.etaClock(a.first, fetchedAt) + ' 도착', Board.stopsText(a.first) || null]
+    .filter(Boolean).join(' · ');
+  if (sub) eta.appendChild(el('div', 'sub', sub));
+  row.appendChild(eta);
+
+  const next = el('div', 'bus-next');
+  next.appendChild(el('div', 'lbl', '다음'));
+  const val = el('div', 'val', Board.etaShort(a.second, fetchedAt, false, now));
+  next.appendChild(val);
+  state.live.push({ el: val, eta: a.second, fetchedAt, withSec: false });
+  const st = Board.stopsText(a.second);
+  if (st) next.appendChild(el('div', 'stops', st));
+  row.appendChild(next);
+  return row;
+}
+
+// ───────── 설정 패널 ─────────
+function openSettings() {
+  renderSettings();
+  document.getElementById('settingsOverlay').hidden = false;
+}
+function closeSettings() {
+  document.getElementById('settingsOverlay').hidden = true;
+  state.lastBusFetch = 0; state.lastWeatherFetch = 0;
+  refreshWeather(); refreshBuses();
+}
+
+function renderSettings() {
+  const root = document.getElementById('settings');
+  root.innerHTML = '';
+  const h1 = el('h1', null, '설정');
+  const close = el('button', 'close', '완료'); close.onclick = closeSettings;
+  h1.appendChild(close); root.appendChild(h1);
+
+  // ① API 키
+  const c1 = scard('① 버스 API 키 (공공데이터포털)');
+  c1.appendChild(desc("data.go.kr 에서 아래 서비스를 '활용신청'하면 마이페이지에 인증키가 나와요. 일반 인증키(Decoding)를 붙여넣으세요.\n• 서울: 서울특별시_정류소정보조회 서비스\n• 경기: 경기도_버스도착정보 조회 + 경기도_정류소 조회"));
+  const keyIn = input('인증키 붙여넣기', Prefs.apiKey);
+  c1.appendChild(keyIn);
+  c1.appendChild(btn('키 저장', () => { Prefs.apiKey = keyIn.value; toast(c1, '저장했어요'); }));
+  root.appendChild(c1);
+
+  // ② 날씨 위치
+  const c2 = scard('② 날씨 위치');
+  const loc = el('div', 'muted', locText()); c2.appendChild(loc);
+  const searchRow = el('div', 'row');
+  const searchIn = input('동네 이름 검색 (예: 분당구 정자동)');
+  searchRow.appendChild(searchIn);
+  const results = el('div');
+  searchRow.appendChild(btnInline('검색', async () => {
+    const qv = searchIn.value.trim(); if (!qv) return;
+    results.innerHTML = '<div class="muted">검색 중…</div>';
+    const hits = await geocode(qv, Prefs.kakaoKey);
+    results.innerHTML = '';
+    if (!hits.length) { results.appendChild(el('div', 'muted', '결과가 없어요. 다른 이름으로 검색해보세요')); return; }
+    for (const p of hits) {
+      const h = el('div', 'hit', '→ ' + p.label);
+      h.onclick = () => { Prefs.setLocation(p.label.split(',')[0].trim(), p.lat, p.lon); loc.textContent = locText(); results.innerHTML = ''; };
+      results.appendChild(h);
+    }
+  }));
+  c2.appendChild(searchRow);
+  c2.appendChild(results);
+  c2.appendChild(desc('검색이 잘 안 되면 아래에 카카오 REST 키를 넣으면 한국 주소 검색이 가장 정확해져요 (선택).'));
+  const kakaoIn = input('카카오 REST API 키 (선택)', Prefs.kakaoKey);
+  c2.appendChild(kakaoIn);
+  c2.appendChild(btn('카카오 키 저장', () => { Prefs.kakaoKey = kakaoIn.value; toast(c2, '저장했어요'); }));
+  root.appendChild(c2);
+
+  // ③ 정류장
+  const c3 = scard('③ 버스 정류장');
+  c3.appendChild(desc('네이버 지도에서 정류장을 누르면 5자리 번호가 있어요. 서울/경기를 고르고 번호(경기는 이름도 가능)로 조회 후 볼 버스를 체크해 저장하세요.'));
+  const stopList = el('div'); c3.appendChild(stopList);
+  renderStopList(stopList);
+
+  c3.appendChild(el('h2', null, '정류장 추가')); c3.lastChild.style.marginTop = '16px';
+  let region = 'seoul';
+  const chips = el('div');
+  const seoulChip = chip('서울', true); const ggChip = chip('경기', false);
+  seoulChip.onclick = () => { region = 'seoul'; seoulChip.classList.add('on'); ggChip.classList.remove('on'); };
+  ggChip.onclick = () => { region = 'gyeonggi'; ggChip.classList.add('on'); seoulChip.classList.remove('on'); };
+  chips.appendChild(seoulChip); chips.appendChild(ggChip); c3.appendChild(chips);
+
+  const lookRow = el('div', 'row'); lookRow.style.marginTop = '10px';
+  const noIn = input('정류소 번호 5자리 (경기는 이름도 가능)');
+  lookRow.appendChild(noIn);
+  const lookBox = el('div');
+  lookRow.appendChild(btnInline('조회', () => lookup(region, noIn.value.replace(/-/g, '').trim(), lookBox, stopList)));
+  c3.appendChild(lookRow);
+  c3.appendChild(lookBox);
+  root.appendChild(c3);
+}
+
+function renderStopList(container) {
+  container.innerHTML = '';
+  const stops = Prefs.stops;
+  if (!stops.length) { container.appendChild(el('div', 'muted', '저장된 정류장이 없어요')); return; }
+  stops.forEach((s, i) => {
+    const item = el('div', 'stop-item');
+    const col = el('div', 'col');
+    col.appendChild(el('div', 'nm', `${s.stopName} (${s.stopNo}) · ${s.region === 'seoul' ? '서울' : '경기'}`));
+    col.appendChild(el('div', 'rt', s.routes.length ? s.routes.join(', ') : '모든 버스'));
+    item.appendChild(col);
+    if (i > 0) item.appendChild(smallBtn('▲', () => {
+      const l = Prefs.stops.slice(); [l[i], l[i - 1]] = [l[i - 1], l[i]]; Prefs.stops = l; renderStopList(container);
+    }));
+    item.appendChild(smallBtn('삭제', () => { Prefs.stops = Prefs.stops.filter((_, j) => j !== i); renderStopList(container); }));
+    container.appendChild(item);
+  });
+}
+
+async function lookup(region, input_, box, stopList) {
+  box.innerHTML = '';
+  if (!Prefs.apiKey) { box.appendChild(el('div', 'bus-err', '먼저 ① API 키를 저장해 주세요')); return; }
+  if (!input_) return;
+  box.innerHTML = '<div class="muted">조회 중…</div>';
+  try {
+    if (region === 'seoul') {
+      const [name, list] = await BusApi.seoul(Prefs.apiKey, input_);
+      box.innerHTML = '';
+      if (!list.length) { box.appendChild(el('div', 'bus-err', "정류장을 못 찾았어요. 번호 확인하거나 '경기'로 바꿔보세요")); return; }
+      showRoutePicker(box, stopList, region, input_, input_, name, uniq(list.map(a => a.route)));
+    } else {
+      const hits = await BusApi.ggFindStation(Prefs.apiKey, input_);
+      const exact = hits.filter(h => h.stopNo === input_);
+      const pick = exact.length === 1 ? exact : hits;
+      box.innerHTML = '';
+      if (pick.length === 1) {
+        const h = pick[0];
+        const routes = await BusApi.gyeonggi(Prefs.apiKey, h.stationId);
+        showRoutePicker(box, stopList, 'gyeonggi', h.stopNo || input_, h.stationId, h.name, uniq(routes.map(r => r.route)));
+      } else if (!pick.length) { box.appendChild(el('div', 'bus-err', '정류장을 못 찾았어요')); }
+      else {
+        box.appendChild(el('div', 'muted', '정류장을 골라주세요'));
+        for (const h of pick.slice(0, 15)) {
+          const hit = el('div', 'hit', `→ ${h.area ? '[' + h.area + '] ' : ''}${h.name} (${h.stopNo || '번호 없음'})`);
+          hit.onclick = async () => {
+            box.innerHTML = '<div class="muted">노선 불러오는 중…</div>';
+            try { const routes = await BusApi.gyeonggi(Prefs.apiKey, h.stationId); box.innerHTML = ''; showRoutePicker(box, stopList, 'gyeonggi', h.stopNo, h.stationId, h.name, uniq(routes.map(r => r.route))); }
+            catch (e) { box.innerHTML = ''; box.appendChild(el('div', 'bus-err', Board.friendly(e, '조회 실패'))); }
+          };
+          box.appendChild(hit);
+        }
+      }
+    }
+  } catch (e) { box.innerHTML = ''; box.appendChild(el('div', 'bus-err', Board.friendly(e, '조회 실패'))); }
+}
+
+function showRoutePicker(box, stopList, region, stopNo, stationId, name, routes) {
+  box.innerHTML = '';
+  box.appendChild(el('div', 'nm', `✔ ${name} (${stopNo})`)); box.lastChild.style.cssText = 'font-size:19px;font-weight:700;margin:12px 0 4px';
+  const checks = [];
+  if (!routes.length) box.appendChild(el('div', 'muted', '지금 도착 정보가 있는 버스가 없어요. 아래에 직접 적어주세요'));
+  else {
+    box.appendChild(el('div', 'muted', '볼 버스를 체크하세요 (아무것도 안 고르면 전부 표시)'));
+    const grid = el('div', 'route-grid');
+    for (const rt of routes) {
+      const lab = document.createElement('label');
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = rt;
+      lab.appendChild(cb); lab.appendChild(document.createTextNode(rt));
+      grid.appendChild(lab); checks.push(cb);
+    }
+    box.appendChild(grid);
+  }
+  const manual = input('직접 추가 (쉼표로 구분, 예: 9401, M4102)');
+  box.appendChild(manual);
+  box.appendChild(btn('이 정류장 저장', () => {
+    const chosen = uniq([...checks.filter(c => c.checked).map(c => c.value), ...manual.value.split(',').map(s => s.trim()).filter(Boolean)]);
+    const stop = { region, stopNo, stationId, stopName: name, routes: chosen };
+    Prefs.stops = [...Prefs.stops.filter(s => !(s.region === region && s.stationId === stationId)), stop];
+    renderStopList(stopList);
+    box.innerHTML = '<div class="ok">저장했어요 ✓</div>';
+  }));
+}
+
+// ───────── 작은 UI 헬퍼 ─────────
+function scard(title) { const c = el('div', 'scard'); c.appendChild(el('h2', null, title)); return c; }
+function desc(t) { return el('div', 'desc', t); }
+function input(ph, val) { const i = document.createElement('input'); i.type = 'text'; i.placeholder = ph; if (val) i.value = val; return i; }
+function btn(label, fn) { const b = el('button', 'btn', label); b.onclick = fn; return b; }
+function btnInline(label, fn) { const b = el('button', 'btn', label); b.onclick = fn; return b; }
+function smallBtn(label, fn) { const b = el('button', 'btn small', label); b.onclick = fn; return b; }
+function chip(label, on) { const b = el('button', 'chip' + (on ? ' on' : ''), label); return b; }
+function uniq(a) { return [...new Set(a.filter(Boolean))]; }
+function toast(container, msg) { const t = el('div', 'ok', msg); container.appendChild(t); setTimeout(() => t.remove(), 2000); }
+function locText() { return Prefs.lat == null ? '아직 위치가 없어요' : `현재: ${Prefs.locName || '지정 위치'}  (${Prefs.lat.toFixed(3)}, ${Prefs.lon.toFixed(3)})`; }
+
+// ───────── 시작 ─────────
+(async function init() {
+  await Prefs.load();
+  backdrop = new WeatherBackdrop(document.getElementById('backdrop'));
+  backdrop.start();
+  document.getElementById('gearBtn').onclick = openSettings;
+  document.getElementById('busCard').onclick = () => { state.lastBusFetch = 0; refreshBuses(); };
+  tick();
+  renderWeather(); renderBuses();
+  refreshWeather(); refreshBuses();
+  setInterval(tick, 1000);
+})();

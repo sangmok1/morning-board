@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "아침보드",
+  "version": "1.0.0",
+  "description": "날씨·옷차림·버스 도착을 보여주는 모닝보드 팝업",
+  "action": { "default_popup": "popup.html", "default_title": "아침보드" },
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://api.open-meteo.com/*",
+    "https://geocoding-api.open-meteo.com/*",
+    "https://nominatim.openstreetmap.org/*",
+    "https://dapi.kakao.com/*",
+    "https://apis.data.go.kr/*",
+    "http://ws.bus.go.kr/*",
+    "https://ws.bus.go.kr/*"
+  ]
+}
