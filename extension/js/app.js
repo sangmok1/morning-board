@@ -210,28 +210,28 @@ function renderSettings() {
   // ② 날씨 위치
   const c2 = scard('② 날씨 위치');
   const loc = el('div', 'muted', locText()); c2.appendChild(loc);
-  const searchRow = el('div', 'row');
-  const searchIn = input('동네 이름 검색 (예: 분당구 정자동)');
-  searchRow.appendChild(searchIn);
   const results = el('div');
-  searchRow.appendChild(btnInline('검색', async () => {
+  const searchIn = input('동네 이름 검색 (예: 상암동, 분당구 정자동)');
+  const doSearch = async () => {
     const qv = searchIn.value.trim(); if (!qv) return;
     results.innerHTML = '<div class="muted">검색 중…</div>';
-    const hits = await geocode(qv, Prefs.kakaoKey);
+    let hits = [];
+    try { hits = await geocode(qv, Prefs.kakaoKey); }
+    catch (e) { results.innerHTML = ''; results.appendChild(el('div', 'bus-err', '검색 오류: ' + (e.message || e))); return; }
     results.innerHTML = '';
     if (!hits.length) { results.appendChild(el('div', 'muted', '결과가 없어요. 다른 이름으로 검색해보세요')); return; }
     for (const p of hits) {
       const h = el('div', 'hit', '→ ' + p.label);
-      h.onclick = () => { Prefs.setLocation(p.label.split(',')[0].trim(), p.lat, p.lon); loc.textContent = locText(); results.innerHTML = ''; };
+      h.onclick = () => { Prefs.setLocation(p.label.split(',')[0].trim(), p.lat, p.lon); loc.textContent = locText(); results.innerHTML = '<div class="ok">위치 저장됨 ✓</div>'; };
       results.appendChild(h);
     }
-  }));
+  };
+  searchIn.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doSearch(); } });
+  const searchRow = el('div', 'row');
+  searchRow.appendChild(searchIn);
+  searchRow.appendChild(btnInline('검색', doSearch));
   c2.appendChild(searchRow);
   c2.appendChild(results);
-  c2.appendChild(desc('검색이 잘 안 되면 아래에 카카오 REST 키를 넣으면 한국 주소 검색이 가장 정확해져요 (선택).'));
-  const kakaoIn = input('카카오 REST API 키 (선택)', Prefs.kakaoKey);
-  c2.appendChild(kakaoIn);
-  c2.appendChild(btn('카카오 키 저장', () => { Prefs.kakaoKey = kakaoIn.value; toast(c2, '저장했어요'); }));
   root.appendChild(c2);
 
   // ③ 정류장
