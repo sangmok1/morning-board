@@ -173,7 +173,7 @@ async function geocode(query, kakaoKey) {
   // 2) Nominatim (OSM, 키 불필요, 한글 주소/동네 잘 잡음)
   try {
     const res = await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&countrycodes=kr' +
-      '&accept-language=ko&q=' + q(query), { headers: { 'Accept-Language': 'ko' } });
+      '&accept-language=ko&q=' + q(query));
     if (res.ok) {
       const arr = await res.json();
       const hits = arr.map(r => ({
