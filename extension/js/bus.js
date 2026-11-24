@@ -153,7 +153,7 @@ const BusApi = {
 
 class BusError extends Error {}
 
-// ───────── 지명검색: Nominatim(한글 강함) → 카카오(키 있으면) → Open-Meteo 순 ─────────
+// ───────── 지명검색: Photon(OSM·브라우저친화·한글OK) → 카카오(키 있으면) → Open-Meteo ─────────
 async function geocode(query, kakaoKey) {
   // 1) 카카오 (키 있으면 최우선 — 한국 POI/주소 최강)
   if (kakaoKey) {
@@ -170,16 +170,24 @@ async function geocode(query, kakaoKey) {
       }
     } catch (e) { /* 폴백 */ }
   }
-  // 2) Nominatim (OSM, 키 불필요, 한글 주소/동네 잘 잡음)
+  // 2) Photon (komoot, 키 불필요, 브라우저 UA 차단 안 함, 한글 동네 잘 잡음)
   try {
-    const res = await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&countrycodes=kr' +
-      '&accept-language=ko&q=' + q(query));
+    const res = await fetch('https://photon.komoot.io/api/?lang=default&limit=10&q=' + q(query));
     if (res.ok) {
-      const arr = await res.json();
-      const hits = arr.map(r => ({
-        label: (r.display_name || '').replace(/, 대한민국$/, ''),
-        lat: parseFloat(r.lat), lon: parseFloat(r.lon),
-      }));
+      const o = await res.json();
+      const seen = new Set();
+      const hits = [];
+      for (const f of (o.features || [])) {
+        const p = f.properties || {};
+        if (p.countrycode !== 'KR') continue;
+        const c = f.geometry && f.geometry.coordinates;
+        if (!c) continue;
+        const label = [...new Set([p.name, p.district || p.city || p.county, p.state].filter(Boolean))].join(', ');
+        const keyk = label + c[0].toFixed(3);
+        if (seen.has(keyk)) continue;
+        seen.add(keyk);
+        hits.push({ label, lat: c[1], lon: c[0] });
+      }
       if (hits.length) return hits;
     }
   } catch (e) { /* 폴백 */ }

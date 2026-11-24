@@ -14,7 +14,8 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
-html, body { width: 460px; height: 600px; background: transparent; }
+/* 크롬 팝업 바깥은 사각형(흰 배경)이라, 전체를 어두운색으로 꽉 채워 흰 모서리를 없앤다 */
+html, body { width: 460px; height: 600px; background: var(--bg); }
 
 body {
   color: var(--text);
@@ -23,11 +24,9 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* 팝업 전체를 둥글게 깎는 컨테이너 */
 #app {
   position: relative;
   width: 100%; height: 100%;
-  border-radius: 24px;
   overflow: hidden;
   background: var(--bg);
 }
