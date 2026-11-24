@@ -35,7 +35,8 @@ class SettingsActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
-        val root = vbox().apply { setPadding(dp(32), dp(24), dp(32), dp(48)); setBackgroundColor(C.BG) }
+
+        val root = vbox().apply { if (narrow) setPadding(dp(16), dp(16), dp(16), dp(40)) else setPadding(dp(32), dp(24), dp(32), dp(48)); setBackgroundColor(C.BG) }
         val scroll = ScrollView(this).apply { setBackgroundColor(C.BG); addView(root) }
         setContentView(scroll)
 
@@ -118,10 +119,12 @@ class SettingsActivity : Activity() {
                 "홈 화면 위젯(길게 누르기 → 위젯 → 아침보드)도 쓸 수 있어요.", 14f, C.DIM))
     }
 
+    private val narrow get() = resources.configuration.smallestScreenWidthDp < 600
+
     private fun card(root: LinearLayout, title: String): LinearLayout {
         val c = vbox().apply {
             background = rounded(C.CARD, dp(20).toFloat())
-            setPadding(dp(24), dp(20), dp(24), dp(20))
+            if (narrow) setPadding(dp(16), dp(16), dp(16), dp(16)) else setPadding(dp(24), dp(20), dp(24), dp(20))
         }
         c.addView(text(title, 20f, C.TEXT, true).apply { setPadding(0, 0, 0, dp(8)) })
         root.addView(c, lp().apply { topMargin = dp(20) })

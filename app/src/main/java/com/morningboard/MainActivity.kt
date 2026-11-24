@@ -44,6 +44,13 @@ class MainActivity : Activity() {
     private var stops: List<StopArrivals> = emptyList()
     private var dayKey: String? = null
 
+    /** 폰처럼 좁은 화면(짧은 변 600dp 미만)인지 */
+    private var phone = false
+    /** 화면 크기에 맞춘 배율: 태블릿 1.0, 폰은 더 작게 */
+    private var k = 1f
+    private fun s(v: Number) = v.toFloat() * k
+    private fun d(v: Number) = dp(v.toFloat() * k)
+
     /** 매초 갱신할 카운트다운 텍스트 */
     private class Live(val view: TextView, val eta: Eta?, val fetchedAt: Long, val withSec: Boolean)
     private val live = mutableListOf<Live>()
@@ -156,27 +163,51 @@ class MainActivity : Activity() {
 
     // ───────────────────────── 화면 구성 ─────────────────────────
     private fun buildUi() {
-        val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val cfg = resources.configuration
+        val landscape = cfg.orientation == Configuration.ORIENTATION_LANDSCAPE
+        phone = cfg.smallestScreenWidthDp < 600
+        // 폰 세로: 짧은 변 기준(360~430dp)으로 0.55~0.65배, 폰 가로는 세로 공간이 더 빠듯해서 조금 더 작게
+        k = when {
+            !phone -> 1f
+            landscape -> 0.52f
+            else -> (cfg.smallestScreenWidthDp / 640f).coerceIn(0.55f, 0.66f)
+        }
+        // 폰 세로는 화면 전체를 한 줄로 쌓고 통째로 스크롤
+        val stacked = phone && !landscape
         val root = vbox().apply {
-            setPadding(dp(28), dp(20), dp(28), dp(24))
+            if (phone) setPadding(dp(16), dp(12), dp(16), dp(16))
+            else setPadding(dp(28), dp(20), dp(28), dp(24))
         }
 
         // 헤더: 시계 / 날짜 / 갱신시각 / 설정
         val header = hbox()
         // 시계는 크게, 날짜는 옆에 붙여서 세로 공간 절약
         val clockRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.BOTTOM }
-        clockText = text("--:--", 104f, C.TEXT, true).apply {
+        clockText = text("--:--", if (stacked) 64f else s(104), C.TEXT, true).apply {
             includeFontPadding = false
             letterSpacing = -0.02f
         }
-        dateText = text("", 26f, C.SUB).apply { setPadding(dp(20), 0, 0, dp(14)) }
-        clockRow.addView(clockText); clockRow.addView(dateText)
-        header.addView(clockRow, lp(0, weight = 1f))
-        updatedText = text("", 15f, C.DIM).apply { setPadding(0, 0, dp(16), 0) }
-        header.addView(updatedText, lp(LinearLayout.LayoutParams.WRAP_CONTENT))
-        val settings = text("⚙  설정", 20f, C.TEXT).apply {
+        dateText = text("", if (stacked) 17f else s(26).coerceAtLeast(15f), C.SUB)
+        updatedText = text("", if (phone) 12f else 15f, C.DIM)
+        if (stacked) {
+            // 폰 세로: 시계 아래에 날짜·갱신시각을 두 줄로
+            val col = vbox()
+            col.addView(clockText)
+            col.addView(dateText)
+            col.addView(updatedText)
+            header.addView(col, lp(0, weight = 1f))
+        } else {
+            dateText.setPadding(d(20), 0, 0, d(14))
+            clockRow.addView(clockText); clockRow.addView(dateText)
+            header.addView(clockRow, lp(0, weight = 1f))
+            updatedText.setPadding(0, 0, dp(if (phone) 10 else 16), 0)
+            header.addView(updatedText, lp(LinearLayout.LayoutParams.WRAP_CONTENT))
+        }
+        if (stacked) header.gravity = Gravity.TOP
+        val settings = text(if (phone) "⚙" else "⚙  설정", if (phone) 22f else 20f, C.TEXT).apply {
             background = rounded(C.GLASS2, dp(16).toFloat())
-            setPadding(dp(20), dp(12), dp(20), dp(12))
+            if (phone) setPadding(dp(14), dp(8), dp(14), dp(8))
+            else setPadding(dp(20), dp(12), dp(20), dp(12))
             setOnClickListener { startActivity(Intent(this@MainActivity, SettingsActivity::class.java)) }
         }
         header.addView(settings, lp(LinearLayout.LayoutParams.WRAP_CONTENT))
@@ -185,39 +216,59 @@ class MainActivity : Activity() {
         val body = LinearLayout(this).apply {
             orientation = if (landscape) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
         }
+        val cardPad = if (phone) 16 else 26
         weatherBox = vbox().apply {
-            background = rounded(C.GLASS, dp(28).toFloat())
-            setPadding(dp(28), dp(24), dp(28), dp(24))
+            background = rounded(C.GLASS, dp(if (phone) 20 else 28).toFloat())
+            setPadding(dp(cardPad), dp(cardPad - 2), dp(cardPad), dp(cardPad - 2))
         }
         val busCard = vbox().apply {
-            background = rounded(C.GLASS, dp(28).toFloat())
-            setPadding(dp(24), dp(20), dp(24), dp(20))
+            background = rounded(C.GLASS, dp(if (phone) 20 else 28).toFloat())
+            setPadding(dp(cardPad - 2), dp(cardPad - 4), dp(cardPad - 2), dp(cardPad - 4))
         }
         val busTitle = hbox()
-        busTitle.addView(text("🚌  버스 도착", 22f, C.SUB, true), lp(0, weight = 1f))
-        busTitle.addView(text("탭하면 새로고침", 14f, C.DIM), lp(LinearLayout.LayoutParams.WRAP_CONTENT))
+        busTitle.addView(text("🚌  버스 도착", if (phone) 17f else 22f, C.SUB, true), lp(0, weight = 1f))
+        busTitle.addView(text("탭하면 새로고침", if (phone) 12f else 14f, C.DIM), lp(LinearLayout.LayoutParams.WRAP_CONTENT))
         busCard.addView(busTitle, lp())
         busBox = vbox()
-        val scroll = ScrollView(this).apply { addView(busBox, lp()); isVerticalScrollBarEnabled = false }
-        busCard.addView(scroll, lp(h = 0, weight = 1f))
+        if (stacked) {
+            busCard.addView(busBox, lp()) // 바깥 스크롤이 담당
+        } else {
+            val scroll = ScrollView(this).apply { addView(busBox, lp()); isVerticalScrollBarEnabled = false }
+            busCard.addView(scroll, lp(h = 0, weight = 1f))
+        }
         busCard.setOnClickListener { lastBusFetch = 0; refreshBuses() }
         busBox.setOnClickListener { lastBusFetch = 0; refreshBuses() }
 
-        if (landscape) {
-            body.addView(weatherBox, lp(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
-            body.addView(busCard, lp(0, LinearLayout.LayoutParams.MATCH_PARENT, 1.25f).apply { marginStart = dp(20) })
-        } else {
-            body.addView(weatherBox, lp())
-            body.addView(busCard, lp(h = 0, weight = 1f).apply { topMargin = dp(20) })
+        val gap = if (phone) 12 else 20
+        when {
+            landscape -> {
+                body.addView(weatherBox, lp(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+                body.addView(busCard, lp(0, LinearLayout.LayoutParams.MATCH_PARENT, 1.25f).apply { marginStart = dp(gap) })
+            }
+            stacked -> {
+                // 폰 세로: 버스를 먼저(아침에 제일 급한 정보), 날씨는 그 아래
+                body.addView(busCard, lp())
+                body.addView(weatherBox, lp().apply { topMargin = dp(gap) })
+            }
+            else -> {
+                body.addView(weatherBox, lp())
+                body.addView(busCard, lp(h = 0, weight = 1f).apply { topMargin = dp(gap) })
+            }
         }
-        root.addView(body, lp(h = 0, weight = 1f).apply { topMargin = dp(16) })
+        if (stacked) root.addView(body, lp().apply { topMargin = dp(12) })
+        else root.addView(body, lp(h = 0, weight = 1f).apply { topMargin = dp(16) })
         // 날씨 배경 위에 화면 내용을 얹음
         val frame = android.widget.FrameLayout(this).apply { setBackgroundColor(C.BG) }
         val bd = WeatherBackdrop(this)
         backdrop?.stop()
         backdrop = bd
         frame.addView(bd, android.widget.FrameLayout.LayoutParams(-1, -1))
-        frame.addView(root, android.widget.FrameLayout.LayoutParams(-1, -1))
+        val content: View = if (stacked) ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
+            isFillViewport = true
+            addView(root, android.widget.FrameLayout.LayoutParams(-1, -2))
+        } else root
+        frame.addView(content, android.widget.FrameLayout.LayoutParams(-1, -1))
         setContentView(frame)
         updateMood()
         bd.start()
@@ -234,38 +285,39 @@ class MainActivity : Activity() {
         val w = weather
         if (w == null) {
             weatherBox.gravity = Gravity.CENTER
-            weatherBox.addView(text(weatherError ?: "날씨 불러오는 중…", 22f, C.SUB).apply { gravity = Gravity.CENTER })
+            weatherBox.addView(text(weatherError ?: "날씨 불러오는 중…", s(22).coerceAtLeast(15f), C.SUB).apply { gravity = Gravity.CENTER })
             return
         }
         weatherBox.gravity = Gravity.NO_GRAVITY
         val land = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-        // 가로 화면은 세로 공간이 빠듯해서 조금 작게
-        val iconDp = if (land) 100 else 128
-        val tileDp = if (land) 92 else 112
+        // 가로 화면은 세로 공간이 빠듯해서 조금 작게, 폰은 배율 k 만큼 더 작게
+        val iconDp = ((if (land) 100 else 128) * k).roundToInt()
+        val tileDp = ((if (land) 92 else 112) * k).roundToInt()
+        val minSp = 12f
 
         val upper = vbox()
         val top = hbox()
         top.addView(pixelView(WeatherApi.icon(w), iconDp), lp(dp(iconDp), dp(iconDp)))
-        val col = vbox().apply { setPadding(dp(24), 0, 0, 0) }
-        col.addView(text("${w.temp.roundToInt()}°", if (land) 64f else 76f, C.TEXT, true).apply { includeFontPadding = false })
-        col.addView(text("${WeatherApi.desc(w.code)} · 체감 ${w.feels.roundToInt()}°", 22f, C.SUB))
-        col.addView(text("최저 ${w.min.roundToInt()}° / 최고 ${w.max.roundToInt()}° · 강수 ${w.rainProb12h}%", 18f, C.DIM))
+        val col = vbox().apply { setPadding(d(24), 0, 0, 0) }
+        col.addView(text("${w.temp.roundToInt()}°", s(if (land) 64 else 76), C.TEXT, true).apply { includeFontPadding = false })
+        col.addView(text("${WeatherApi.desc(w.code)} · 체감 ${w.feels.roundToInt()}°", s(22).coerceAtLeast(15f), C.SUB))
+        col.addView(text("최저 ${w.min.roundToInt()}° / 최고 ${w.max.roundToInt()}° · 강수 ${w.rainProb12h}%", s(18).coerceAtLeast(minSp), C.DIM))
         top.addView(col, lp(0, weight = 1f))
         upper.addView(top, lp())
 
         val outfit = WeatherApi.outfit(w)
-        upper.addView(text("오늘의 옷차림", 18f, C.SUB).apply { setPadding(0, dp(if (land) 16 else 24), 0, dp(8)) })
+        upper.addView(text("오늘의 옷차림", s(18).coerceAtLeast(13f), C.SUB).apply { setPadding(0, d(if (land) 16 else 24), 0, d(8)) })
         val row = hbox()
         for (item in outfit.items) {
-            val cell = vbox().apply { gravity = Gravity.CENTER_HORIZONTAL; setPadding(0, 0, dp(14), 0) }
+            val cell = vbox().apply { gravity = Gravity.CENTER_HORIZONTAL; setPadding(0, 0, d(14), 0) }
             cell.addView(pixelTile(item.sprite, tileDp), lp(dp(tileDp), dp(tileDp)))
-            cell.addView(text(item.label, 17f, C.TEXT).apply { gravity = Gravity.CENTER; setPadding(0, dp(6), 0, 0) },
+            cell.addView(text(item.label, s(17).coerceAtLeast(minSp), C.TEXT).apply { gravity = Gravity.CENTER; setPadding(0, d(6), 0, 0) },
                 lp(dp(tileDp)))
             row.addView(cell)
         }
         upper.addView(row, lp())
-        upper.addView(text(outfit.headline, if (land) 28f else 30f, C.ACCENT, true).apply { setPadding(0, dp(if (land) 10 else 16), 0, 0) })
-        for (tip in outfit.tips) upper.addView(text("• $tip", if (land) 18f else 19f, C.TEXT).apply { setPadding(0, dp(4), 0, 0) })
+        upper.addView(text(outfit.headline, s(if (land) 28 else 30).coerceAtLeast(18f), C.ACCENT, true).apply { setPadding(0, d(if (land) 10 else 16), 0, 0) })
+        for (tip in outfit.tips) upper.addView(text("• $tip", s(if (land) 18 else 19).coerceAtLeast(13f), C.TEXT).apply { setPadding(0, d(4), 0, 0) })
         weatherError?.let { upper.addView(text(it, 14f, C.RED).apply { setPadding(0, dp(10), 0, 0) }) }
 
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(Date())
@@ -277,7 +329,7 @@ class MainActivity : Activity() {
         } else {
             weatherBox.addView(upper, lp())
         }
-        if (week.isNotEmpty()) weatherBox.addView(weekRow(week, today, land), lp().apply { topMargin = dp(if (land) 10 else 18) })
+        if (week.isNotEmpty()) weatherBox.addView(weekRow(week, today, land || phone), lp().apply { topMargin = d(if (land) 10 else 18) })
     }
 
     private val ymd = SimpleDateFormat("yyyy-MM-dd", Locale.KOREA)
@@ -287,11 +339,11 @@ class MainActivity : Activity() {
     /** 주간 날씨: 요일 / 아이콘 / 최고·최저 / 강수확률 */
     private fun weekRow(days: List<DayForecast>, today: String, compact: Boolean = false): View {
         val box = vbox()
-        box.addView(text("주간 날씨", 18f, C.SUB).apply { setPadding(0, 0, 0, dp(if (compact) 6 else 8)) })
+        box.addView(text("주간 날씨", s(18).coerceAtLeast(13f), C.SUB).apply { setPadding(0, 0, 0, dp(if (compact) 6 else 8)) })
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             background = rounded(C.GLASS2, dp(18).toFloat())
-            setPadding(dp(6), dp(if (compact) 8 else 12), dp(6), dp(if (compact) 8 else 12))
+            setPadding(dp(if (phone) 2 else 6), dp(if (compact) 8 else 12), dp(if (phone) 2 else 6), dp(if (compact) 8 else 12))
         }
         val anyRain = days.any { it.rainProb >= 30 }
         for (d in days) {
@@ -306,15 +358,17 @@ class MainActivity : Activity() {
                 else -> C.SUB
             }
             val cell = vbox().apply { gravity = Gravity.CENTER_HORIZONTAL }
-            cell.addView(text(if (isToday) "오늘" else dow.format(date), 16f, labelColor, true).apply { gravity = Gravity.CENTER })
-            cell.addView(pixelView(WeatherApi.iconFor(d.code), 48, 0),
-                lp(dp(48), dp(48)).apply { topMargin = dp(4) })
-            val temps = hbox().apply { gravity = Gravity.CENTER; setPadding(0, dp(6), 0, 0) }
-            temps.addView(text("${d.max.roundToInt()}°", 17f, C.TEXT, true))
-            temps.addView(text(" ${d.min.roundToInt()}°", 15f, C.DIM))
+            val ic = if (phone) 30 else 48
+            cell.addView(text(if (isToday) "오늘" else dow.format(date), if (phone) 13f else 16f, labelColor, true).apply { gravity = Gravity.CENTER })
+            cell.addView(pixelView(WeatherApi.iconFor(d.code), ic, 0),
+                lp(dp(ic), dp(ic)).apply { topMargin = dp(4) })
+            // 폰은 칸이 좁아서 최고/최저를 위아래로
+            val temps = (if (phone) vbox() else hbox()).apply { gravity = Gravity.CENTER; setPadding(0, dp(if (phone) 2 else 6), 0, 0) }
+            temps.addView(text("${d.max.roundToInt()}°", if (phone) 13f else 17f, C.TEXT, true).apply { gravity = Gravity.CENTER })
+            temps.addView(text(if (phone) "${d.min.roundToInt()}°" else " ${d.min.roundToInt()}°", if (phone) 12f else 15f, C.DIM).apply { gravity = Gravity.CENTER })
             cell.addView(temps, lp())
-            val rain = if (d.rainProb >= 30) "☂ ${d.rainProb}%" else " "
-            if (anyRain) cell.addView(text(rain, 13f, C.BLUE).apply { gravity = Gravity.CENTER })
+            val rain = if (d.rainProb >= 30) (if (phone) "${d.rainProb}%" else "☂ ${d.rainProb}%") else " "
+            if (anyRain) cell.addView(text(rain, if (phone) 11f else 13f, C.BLUE).apply { gravity = Gravity.CENTER })
             row.addView(cell, lp(0, weight = 1f))
         }
         box.addView(row, lp())
@@ -334,33 +388,36 @@ class MainActivity : Activity() {
             busBox.addView(emptyText("버스 정보 불러오는 중…")); return
         }
         for (s in stops) {
-            busBox.addView(text("${s.stopName}  ·  ${s.stop.stopNo}", 18f, C.SUB, true).apply {
-                setPadding(dp(4), dp(14), 0, dp(4))
+            busBox.addView(text("${s.stopName}  ·  ${s.stop.stopNo}", if (phone) 14f else 18f, C.SUB, true).apply {
+                setPadding(dp(4), dp(if (phone) 10 else 14), 0, dp(4))
             })
             if (s.error != null) {
-                busBox.addView(text(s.error, 16f, C.RED).apply { setPadding(dp(4), dp(4), 0, dp(4)) }); continue
+                busBox.addView(text(s.error, if (phone) 13f else 16f, C.RED).apply { setPadding(dp(4), dp(4), 0, dp(4)) }); continue
             }
             if (s.arrivals.isEmpty()) {
                 val msg = if (s.stop.routes.isEmpty()) "도착 예정 버스 없음" else "${s.stop.routes.joinToString(", ")} 도착 정보 없음"
                 busBox.addView(emptyText(msg)); continue
             }
-            for (a in s.arrivals) busBox.addView(busRow(a, s.fetchedAt), lp().apply { topMargin = dp(10) })
+            for (a in s.arrivals) busBox.addView(busRow(a, s.fetchedAt), lp().apply { topMargin = dp(if (phone) 8 else 10) })
         }
     }
 
     private fun busRow(a: Arrival, fetchedAt: Long): View {
         val row = hbox().apply {
-            background = rounded(C.GLASS2, dp(18).toFloat())
-            setPadding(dp(20), dp(14), dp(20), dp(14))
+            background = rounded(C.GLASS2, dp(if (phone) 14 else 18).toFloat())
+            if (phone) setPadding(dp(12), dp(10), dp(12), dp(10))
+            else setPadding(dp(20), dp(14), dp(20), dp(14))
         }
         val routeCol = vbox()
-        routeCol.addView(text(a.route, 34f, C.TEXT, true))
-        if (a.dest.isNotBlank()) routeCol.addView(text(a.dest, 13f, C.DIM).apply { maxLines = 1 })
-        row.addView(routeCol, lp(dp(150)))
+        routeCol.addView(text(a.route, if (phone) 22f else 34f, C.TEXT, true))
+        if (a.dest.isNotBlank()) routeCol.addView(text(a.dest, if (phone) 11f else 13f, C.DIM).apply {
+            maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+        })
+        row.addView(routeCol, lp(dp(if (phone) 82 else 150)).apply { marginEnd = dp(if (phone) 8 else 0) })
 
         val first = vbox()
-        val eta1 = if (a.first == null) text("도착 정보 없음", 22f, C.DIM)
-        else text(Board.etaShort(a.first, fetchedAt, true), 32f, C.ACCENT, true).also {
+        val eta1 = if (a.first == null) text("도착 정보 없음", if (phone) 15f else 22f, C.DIM)
+        else text(Board.etaShort(a.first, fetchedAt, true), if (phone) 21f else 32f, C.ACCENT, true).also {
             live += Live(it, a.first, fetchedAt, true)
         }
         first.addView(eta1)
@@ -368,20 +425,20 @@ class MainActivity : Activity() {
             Board.etaClock(a.first, fetchedAt)?.let { "$it 도착" },
             Board.stopsText(a.first).ifBlank { null },
         ).joinToString(" · ")
-        if (sub.isNotBlank()) first.addView(text(sub, 16f, C.SUB))
+        if (sub.isNotBlank()) first.addView(text(sub, if (phone) 12f else 16f, C.SUB))
         row.addView(first, lp(0, weight = 1f))
 
         val second = vbox().apply { gravity = Gravity.END }
-        second.addView(text("다음", 14f, C.DIM))
-        val eta2 = text(Board.etaShort(a.second, fetchedAt), 22f, C.TEXT)
+        second.addView(text("다음", if (phone) 11f else 14f, C.DIM))
+        val eta2 = text(Board.etaShort(a.second, fetchedAt), if (phone) 15f else 22f, C.TEXT)
         live += Live(eta2, a.second, fetchedAt, false)
         second.addView(eta2)
-        Board.stopsText(a.second).takeIf { it.isNotBlank() }?.let { second.addView(text(it, 13f, C.DIM)) }
+        Board.stopsText(a.second).takeIf { it.isNotBlank() }?.let { second.addView(text(it, if (phone) 11f else 13f, C.DIM)) }
         row.addView(second, lp(LinearLayout.LayoutParams.WRAP_CONTENT))
         return row
     }
 
-    private fun emptyText(s: String) = text(s, 20f, C.DIM).apply { setPadding(dp(4), dp(16), 0, dp(8)) }
+    private fun emptyText(s: String) = text(s, if (phone) 15f else 20f, C.DIM).apply { setPadding(dp(4), dp(16), 0, dp(8)) }
 
     private fun pixelView(sprite: Array<String>, sizeDp: Int, bg: Int = 0xFFE9EDF3.toInt()) = ImageView(this).apply {
         val bmp = Pixel.tile(sprite, dp(sizeDp), bg)
