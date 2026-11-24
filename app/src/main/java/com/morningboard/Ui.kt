@@ -16,6 +16,9 @@ object C {
     const val BG = 0xFF0F1115.toInt()
     const val CARD = 0xFF1A1E26.toInt()
     const val CARD2 = 0xFF242A35.toInt()
+    /** 날씨 배경이 살짝 비치는 반투명 카드 */
+    const val GLASS = 0xB8161A22.toInt()
+    const val GLASS2 = 0xCC222833.toInt()
     const val TEXT = 0xFFFFFFFF.toInt()
     const val SUB = 0xFFBAC0CC.toInt()
     const val DIM = 0xFF868E9C.toInt()

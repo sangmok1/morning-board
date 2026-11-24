@@ -13,7 +13,11 @@ data class Weather(
     val rainProb12h: Int,     // 앞으로 12시간 최대 강수확률
     val rainSoon: Boolean,    // 앞으로 12시간 안에 비/눈 예보
     val fetchedAt: Long,
+    val week: List<DayForecast> = emptyList(),
 )
+
+/** 주간 예보 하루치 (date = "2026-11-24") */
+data class DayForecast(val date: String, val code: Int, val min: Double, val max: Double, val rainProb: Int)
 
 data class OutfitItem(val sprite: Array<String>, val label: String)
 
@@ -25,8 +29,8 @@ object WeatherApi {
         val url = "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon" +
             "&current=temperature_2m,apparent_temperature,weather_code,is_day" +
             "&hourly=precipitation_probability,weather_code" +
-            "&daily=temperature_2m_max,temperature_2m_min" +
-            "&forecast_hours=12&forecast_days=1&timezone=Asia%2FSeoul"
+            "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max" +
+            "&forecast_hours=12&forecast_days=7&timezone=Asia%2FSeoul"
         val o = JSONObject(Http.get(url))
         val cur = o.getJSONObject("current")
         val daily = o.getJSONObject("daily")
@@ -41,6 +45,16 @@ object WeatherApi {
             if (isWet(codes.optInt(i, 0)) && p >= 40) wetSoon = true
         }
         val code = cur.getInt("weather_code")
+        val dTime = daily.getJSONArray("time")
+        val dCode = daily.getJSONArray("weather_code")
+        val dMin = daily.getJSONArray("temperature_2m_min")
+        val dMax = daily.getJSONArray("temperature_2m_max")
+        val dRain = daily.optJSONArray("precipitation_probability_max")
+        val week = (0 until dTime.length()).mapNotNull { i ->
+            if (dMin.isNull(i) || dMax.isNull(i)) null
+            else DayForecast(dTime.getString(i), dCode.optInt(i, 3), dMin.getDouble(i), dMax.getDouble(i),
+                dRain?.optInt(i, 0) ?: 0)
+        }
         return Weather(
             temp = cur.getDouble("temperature_2m"),
             feels = cur.getDouble("apparent_temperature"),
@@ -51,15 +65,18 @@ object WeatherApi {
             rainProb12h = maxProb,
             rainSoon = isWet(code) || wetSoon || maxProb >= 50,
             fetchedAt = System.currentTimeMillis(),
+            week = week,
         )
     }
 
     fun isWet(code: Int) = code in 51..67 || code in 71..77 || code in 80..86 || code in 95..99
     fun isSnow(code: Int) = code in 71..77 || code == 85 || code == 86
 
-    fun icon(w: Weather): Array<String> = when (w.code) {
-        0, 1 -> if (w.isDay) Pixel.SUN else Pixel.MOON
-        2 -> if (w.isDay) Pixel.PARTLY else Pixel.CLOUD
+    fun icon(w: Weather): Array<String> = iconFor(w.code, w.isDay)
+
+    fun iconFor(code: Int, isDay: Boolean = true): Array<String> = when (code) {
+        0, 1 -> if (isDay) Pixel.SUN else Pixel.MOON
+        2 -> if (isDay) Pixel.PARTLY else Pixel.CLOUD
         3 -> Pixel.CLOUD
         45, 48 -> Pixel.FOG
         in 71..77, 85, 86 -> Pixel.SNOW

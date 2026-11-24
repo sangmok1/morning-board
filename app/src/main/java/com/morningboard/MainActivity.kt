@@ -31,6 +31,9 @@ class MainActivity : Activity() {
     private lateinit var updatedText: TextView
     private lateinit var weatherBox: LinearLayout
     private lateinit var busBox: LinearLayout
+    private var backdrop: WeatherBackdrop? = null
+    /** 미리보기용: adb shell am start ... --es mood RAIN */
+    private var moodOverride: Mood? = null
 
     private var lastBusFetch = 0L
     private var lastWeatherFetch = 0L
@@ -39,6 +42,7 @@ class MainActivity : Activity() {
     private var weather: Weather? = null
     private var weatherError: String? = null
     private var stops: List<StopArrivals> = emptyList()
+    private var dayKey: String? = null
 
     /** 매초 갱신할 카운트다운 텍스트 */
     private class Live(val view: TextView, val eta: Eta?, val fetchedAt: Long, val withSec: Boolean)
@@ -54,6 +58,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
+        moodOverride = intent.getStringExtra("mood")?.let { runCatching { Mood.valueOf(it) }.getOrNull() }
         buildUi()
     }
 
@@ -70,11 +75,13 @@ class MainActivity : Activity() {
         hideSystemBars()
         refreshWeather(); refreshBuses()
         main.post(ticker)
+        backdrop?.start()
     }
 
     override fun onPause() {
         super.onPause()
         main.removeCallbacks(ticker)
+        backdrop?.stop()
     }
 
     private fun hideSystemBars() {
@@ -92,6 +99,9 @@ class MainActivity : Activity() {
 
     private fun tick() {
         val now = System.currentTimeMillis()
+        val dayChanged = dayKey != null && dayKey != SimpleDateFormat("yyyyMMdd", Locale.KOREA).format(Date(now))
+        dayKey = SimpleDateFormat("yyyyMMdd", Locale.KOREA).format(Date(now))
+        if (dayChanged) renderWeather() // 자정 지나면 주간 예보의 '오늘' 갱신
         clockText.text = SimpleDateFormat("HH:mm", Locale.KOREA).format(Date(now))
         dateText.text = SimpleDateFormat("M월 d일 EEEE", Locale.KOREA).format(Date(now))
         for (l in live) l.view.text = Board.etaShort(l.eta, l.fetchedAt, l.withSec, now)
@@ -148,21 +158,24 @@ class MainActivity : Activity() {
     private fun buildUi() {
         val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val root = vbox().apply {
-            setBackgroundColor(C.BG)
             setPadding(dp(28), dp(20), dp(28), dp(24))
         }
 
         // 헤더: 시계 / 날짜 / 갱신시각 / 설정
         val header = hbox()
-        val clockCol = vbox()
-        clockText = text("--:--", 60f, C.TEXT, true)
-        dateText = text("", 22f, C.SUB)
-        clockCol.addView(clockText); clockCol.addView(dateText)
-        header.addView(clockCol, lp(0, weight = 1f))
+        // 시계는 크게, 날짜는 옆에 붙여서 세로 공간 절약
+        val clockRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.BOTTOM }
+        clockText = text("--:--", 104f, C.TEXT, true).apply {
+            includeFontPadding = false
+            letterSpacing = -0.02f
+        }
+        dateText = text("", 26f, C.SUB).apply { setPadding(dp(20), 0, 0, dp(14)) }
+        clockRow.addView(clockText); clockRow.addView(dateText)
+        header.addView(clockRow, lp(0, weight = 1f))
         updatedText = text("", 15f, C.DIM).apply { setPadding(0, 0, dp(16), 0) }
         header.addView(updatedText, lp(LinearLayout.LayoutParams.WRAP_CONTENT))
         val settings = text("⚙  설정", 20f, C.TEXT).apply {
-            background = rounded(C.CARD2, dp(16).toFloat())
+            background = rounded(C.GLASS2, dp(16).toFloat())
             setPadding(dp(20), dp(12), dp(20), dp(12))
             setOnClickListener { startActivity(Intent(this@MainActivity, SettingsActivity::class.java)) }
         }
@@ -173,11 +186,11 @@ class MainActivity : Activity() {
             orientation = if (landscape) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
         }
         weatherBox = vbox().apply {
-            background = rounded(C.CARD, dp(28).toFloat())
+            background = rounded(C.GLASS, dp(28).toFloat())
             setPadding(dp(28), dp(24), dp(28), dp(24))
         }
         val busCard = vbox().apply {
-            background = rounded(C.CARD, dp(28).toFloat())
+            background = rounded(C.GLASS, dp(28).toFloat())
             setPadding(dp(24), dp(20), dp(24), dp(20))
         }
         val busTitle = hbox()
@@ -198,11 +211,25 @@ class MainActivity : Activity() {
             body.addView(busCard, lp(h = 0, weight = 1f).apply { topMargin = dp(20) })
         }
         root.addView(body, lp(h = 0, weight = 1f).apply { topMargin = dp(16) })
-        setContentView(root)
+        // 날씨 배경 위에 화면 내용을 얹음
+        val frame = android.widget.FrameLayout(this).apply { setBackgroundColor(C.BG) }
+        val bd = WeatherBackdrop(this)
+        backdrop?.stop()
+        backdrop = bd
+        frame.addView(bd, android.widget.FrameLayout.LayoutParams(-1, -1))
+        frame.addView(root, android.widget.FrameLayout.LayoutParams(-1, -1))
+        setContentView(frame)
+        updateMood()
+        bd.start()
         tick()
     }
 
+    private fun updateMood() {
+        backdrop?.mood = moodOverride ?: weather?.let { moodOf(it.code, it.isDay) }
+    }
+
     private fun renderWeather() {
+        updateMood()
         weatherBox.removeAllViews()
         val w = weather
         if (w == null) {
@@ -211,29 +238,87 @@ class MainActivity : Activity() {
             return
         }
         weatherBox.gravity = Gravity.NO_GRAVITY
+        val land = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        // 가로 화면은 세로 공간이 빠듯해서 조금 작게
+        val iconDp = if (land) 100 else 128
+        val tileDp = if (land) 92 else 112
+
+        val upper = vbox()
         val top = hbox()
-        top.addView(pixelView(WeatherApi.icon(w), 128), lp(dp(128), dp(128)))
+        top.addView(pixelView(WeatherApi.icon(w), iconDp), lp(dp(iconDp), dp(iconDp)))
         val col = vbox().apply { setPadding(dp(24), 0, 0, 0) }
-        col.addView(text("${w.temp.roundToInt()}°", 76f, C.TEXT, true))
+        col.addView(text("${w.temp.roundToInt()}°", if (land) 64f else 76f, C.TEXT, true).apply { includeFontPadding = false })
         col.addView(text("${WeatherApi.desc(w.code)} · 체감 ${w.feels.roundToInt()}°", 22f, C.SUB))
         col.addView(text("최저 ${w.min.roundToInt()}° / 최고 ${w.max.roundToInt()}° · 강수 ${w.rainProb12h}%", 18f, C.DIM))
         top.addView(col, lp(0, weight = 1f))
-        weatherBox.addView(top, lp())
+        upper.addView(top, lp())
 
         val outfit = WeatherApi.outfit(w)
-        weatherBox.addView(text("오늘의 옷차림", 18f, C.SUB).apply { setPadding(0, dp(24), 0, dp(10)) })
+        upper.addView(text("오늘의 옷차림", 18f, C.SUB).apply { setPadding(0, dp(if (land) 16 else 24), 0, dp(8)) })
         val row = hbox()
         for (item in outfit.items) {
             val cell = vbox().apply { gravity = Gravity.CENTER_HORIZONTAL; setPadding(0, 0, dp(14), 0) }
-            cell.addView(pixelTile(item.sprite, 112), lp(dp(112), dp(112)))
+            cell.addView(pixelTile(item.sprite, tileDp), lp(dp(tileDp), dp(tileDp)))
             cell.addView(text(item.label, 17f, C.TEXT).apply { gravity = Gravity.CENTER; setPadding(0, dp(6), 0, 0) },
-                lp(dp(112)))
+                lp(dp(tileDp)))
             row.addView(cell)
         }
-        weatherBox.addView(row, lp())
-        weatherBox.addView(text(outfit.headline, 30f, C.ACCENT, true).apply { setPadding(0, dp(16), 0, 0) })
-        for (tip in outfit.tips) weatherBox.addView(text("• $tip", 19f, C.TEXT).apply { setPadding(0, dp(6), 0, 0) })
-        weatherError?.let { weatherBox.addView(text(it, 14f, C.RED).apply { setPadding(0, dp(10), 0, 0) }) }
+        upper.addView(row, lp())
+        upper.addView(text(outfit.headline, if (land) 28f else 30f, C.ACCENT, true).apply { setPadding(0, dp(if (land) 10 else 16), 0, 0) })
+        for (tip in outfit.tips) upper.addView(text("• $tip", if (land) 18f else 19f, C.TEXT).apply { setPadding(0, dp(4), 0, 0) })
+        weatherError?.let { upper.addView(text(it, 14f, C.RED).apply { setPadding(0, dp(10), 0, 0) }) }
+
+        val today = SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(Date())
+        val week = w.week.filter { it.date >= today }.take(7)
+        if (land) {
+            // 가로: 위쪽 내용이 넘치면 위쪽만 스크롤되고, 주간 날씨는 항상 카드 바닥에 고정
+            val sv = ScrollView(this).apply { addView(upper, lp()); isVerticalScrollBarEnabled = false }
+            weatherBox.addView(sv, lp(h = 0, weight = 1f))
+        } else {
+            weatherBox.addView(upper, lp())
+        }
+        if (week.isNotEmpty()) weatherBox.addView(weekRow(week, today, land), lp().apply { topMargin = dp(if (land) 10 else 18) })
+    }
+
+    private val ymd = SimpleDateFormat("yyyy-MM-dd", Locale.KOREA)
+    private val dow = SimpleDateFormat("E", Locale.KOREA)
+    private val cal = java.util.Calendar.getInstance()
+
+    /** 주간 날씨: 요일 / 아이콘 / 최고·최저 / 강수확률 */
+    private fun weekRow(days: List<DayForecast>, today: String, compact: Boolean = false): View {
+        val box = vbox()
+        box.addView(text("주간 날씨", 18f, C.SUB).apply { setPadding(0, 0, 0, dp(if (compact) 6 else 8)) })
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = rounded(C.GLASS2, dp(18).toFloat())
+            setPadding(dp(6), dp(if (compact) 8 else 12), dp(6), dp(if (compact) 8 else 12))
+        }
+        val anyRain = days.any { it.rainProb >= 30 }
+        for (d in days) {
+            val date = ymd.parse(d.date) ?: continue
+            cal.time = date
+            val weekday = cal.get(java.util.Calendar.DAY_OF_WEEK)
+            val isToday = d.date == today
+            val labelColor = when {
+                isToday -> C.ACCENT
+                weekday == java.util.Calendar.SUNDAY -> C.RED
+                weekday == java.util.Calendar.SATURDAY -> C.BLUE
+                else -> C.SUB
+            }
+            val cell = vbox().apply { gravity = Gravity.CENTER_HORIZONTAL }
+            cell.addView(text(if (isToday) "오늘" else dow.format(date), 16f, labelColor, true).apply { gravity = Gravity.CENTER })
+            cell.addView(pixelView(WeatherApi.iconFor(d.code), 48, 0),
+                lp(dp(48), dp(48)).apply { topMargin = dp(4) })
+            val temps = hbox().apply { gravity = Gravity.CENTER; setPadding(0, dp(6), 0, 0) }
+            temps.addView(text("${d.max.roundToInt()}°", 17f, C.TEXT, true))
+            temps.addView(text(" ${d.min.roundToInt()}°", 15f, C.DIM))
+            cell.addView(temps, lp())
+            val rain = if (d.rainProb >= 30) "☂ ${d.rainProb}%" else " "
+            if (anyRain) cell.addView(text(rain, 13f, C.BLUE).apply { gravity = Gravity.CENTER })
+            row.addView(cell, lp(0, weight = 1f))
+        }
+        box.addView(row, lp())
+        return box
     }
 
     private fun renderBuses() {
@@ -265,7 +350,7 @@ class MainActivity : Activity() {
 
     private fun busRow(a: Arrival, fetchedAt: Long): View {
         val row = hbox().apply {
-            background = rounded(C.CARD2, dp(18).toFloat())
+            background = rounded(C.GLASS2, dp(18).toFloat())
             setPadding(dp(20), dp(14), dp(20), dp(14))
         }
         val routeCol = vbox()
@@ -298,8 +383,8 @@ class MainActivity : Activity() {
 
     private fun emptyText(s: String) = text(s, 20f, C.DIM).apply { setPadding(dp(4), dp(16), 0, dp(8)) }
 
-    private fun pixelView(sprite: Array<String>, sizeDp: Int) = ImageView(this).apply {
-        val bmp = Pixel.tile(sprite, dp(sizeDp))
+    private fun pixelView(sprite: Array<String>, sizeDp: Int, bg: Int = 0xFFE9EDF3.toInt()) = ImageView(this).apply {
+        val bmp = Pixel.tile(sprite, dp(sizeDp), bg)
         setImageDrawable(BitmapDrawable(resources, bmp).apply { isFilterBitmap = false })
     }
 
