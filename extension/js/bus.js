@@ -42,6 +42,8 @@ function parseSeoulMsg(msg) {
 const BusApi = {
   async _get(url) {
     const res = await fetch(url);
+    if (res.status === 401 || res.status === 403)
+      throw new BusError(`API 키 인증 실패(HTTP ${res.status}). data.go.kr에서 이 버스 서비스 활용신청 승인 여부·키를 확인하세요(승인 직후면 1~2시간 뒤 적용).`);
     const body = await res.text();
     if (!res.ok && !body) throw new Error('HTTP ' + res.status);
     return body;
@@ -55,8 +57,8 @@ const BusApi = {
       else { name = stop.stopName; list = await this.gyeonggi(key, stop.stationId); }
       let filtered = list;
       if (stop.routes.length) {
-        const order = new Map(stop.routes.map((r, i) => [r, i]));
-        filtered = list.filter(a => order.has(a.route)).sort((a, b) => order.get(a.route) - order.get(b.route));
+        const order = new Map(stop.routes.map((r, i) => [String(r), i]));
+        filtered = list.filter(a => order.has(String(a.route))).sort((a, b) => order.get(String(a.route)) - order.get(String(b.route)));
       }
       return { stop, stopName: name || stop.stopName, arrivals: filtered, error: null, fetchedAt: now };
     } catch (e) {
@@ -77,7 +79,7 @@ const BusApi = {
       if (!stopName) stopName = r.stNm || '';
       const dir = r.adirection || '';
       return {
-        route: r.rtNm || '',
+        route: String(r.rtNm || ''),
         dest: dir ? dir + ' 방면' : '',
         first: parseSeoulMsg(r.arrmsg1),
         second: parseSeoulMsg(r.arrmsg2),
@@ -107,7 +109,7 @@ const BusApi = {
     const body = this._ggBody(await this._get(url));
     if (!body) return [];
     return this._arr(body, 'busArrivalList').map(r => ({
-      route: r.routeName || r.routeId || '',
+      route: String(r.routeName || r.routeId || ''),
       dest: r.routeDestName ? r.routeDestName + ' 방면' : '',
       first: this._ggEta(r, '1'),
       second: this._ggEta(r, '2'),
