@@ -517,7 +517,6 @@ function seedShuttles() {
   backdrop.start();
   document.getElementById('gearBtn').onclick = openSettings;
   document.getElementById('busCard').onclick = () => { state.lastBusFetch = 0; refreshBuses(); };
-  document.getElementById('shuttleCard').onclick = openSettings;
   const expandBtn = document.getElementById('expandBtn');
   const applyFull = () => {
     document.body.classList.toggle('full', Prefs.fullMode);

@@ -146,7 +146,7 @@ body.full .week-rain { font-size: 8px; }
 .week-rain { font-size: 10px; color: var(--blue); }
 
 /* ── 셔틀 ── */
-.shuttle { flex: 0 0 auto; cursor: pointer; }
+.shuttle { flex: 0 0 auto; }
 .shuttle-list { margin-top: 6px; }
 .shuttle-item { margin-top: 8px; }
 .shuttle-item:first-child { margin-top: 0; }
