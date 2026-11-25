@@ -62,8 +62,10 @@ body {
   overflow: hidden;
   display: flex; flex-direction: column;
 }
-.weather { flex: 0 0 auto; }
-.bus { flex: 1; min-height: 0; }
+/* 우선순위: 셔틀·버스는 고정(안 찌그러짐), 날씨가 남는 공간에서 줄어듦/스크롤 */
+.weather { flex: 1 1 auto; min-height: 120px; overflow-y: auto; }
+.weather::-webkit-scrollbar { width: 0; }
+.bus { flex: 0 0 auto; }
 
 /* ── 날씨 ── */
 .w-top { display: flex; align-items: center; }
@@ -91,10 +93,23 @@ body {
 .week-min { font-size: 11px; color: var(--dim); }
 .week-rain { font-size: 10px; color: var(--blue); }
 
+/* ── 셔틀 ── */
+.shuttle { flex: 0 0 auto; cursor: pointer; }
+.shuttle-list { margin-top: 6px; }
+.shuttle-item { margin-top: 8px; }
+.shuttle-item:first-child { margin-top: 0; }
+.shuttle-name { font-size: 13px; font-weight: 700; color: var(--sub); margin-bottom: 5px; }
+.shuttle-times { display: flex; gap: 8px; }
+.shuttle-time { flex: 1; background: var(--card2); border-radius: 12px; padding: 8px 12px; }
+.shuttle-time .hm { font-size: 20px; font-weight: 800; color: var(--accent); line-height: 1; }
+.shuttle-time .left { font-size: 12px; color: var(--sub); margin-top: 3px; }
+.shuttle-time.soon .hm { color: var(--red); }
+.shuttle-empty { font-size: 13px; color: var(--dim); padding: 4px 0; }
+
 /* ── 버스 ── */
 .bus-title { display: flex; align-items: center; font-size: 15px; font-weight: 700; color: var(--sub); }
 .bus-title .hint { margin-left: auto; font-size: 11px; color: var(--dim); font-weight: 400; }
-.bus-list { margin-top: 5px; overflow-y: auto; flex: 1; min-height: 0; }
+.bus-list { margin-top: 5px; overflow-y: auto; max-height: 185px; }
 .bus-list::-webkit-scrollbar { width: 0; }
 .bus-stopname { font-size: 13px; font-weight: 700; color: var(--sub); padding: 6px 2px 2px; }
 .bus-empty { font-size: 14px; color: var(--dim); padding: 10px 2px; }

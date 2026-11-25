@@ -1,7 +1,7 @@
 // 설정 저장소 + 보드 공용 헬퍼 — Android Data.kt / Board.kt 이식
 
 const Prefs = {
-  _d: { apiKey: '', kakaoKey: '', locName: '', lat: null, lon: null, stops: [] },
+  _d: { apiKey: '', kakaoKey: '', locName: '', lat: null, lon: null, stops: [], shuttles: [] },
   _useChrome: typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local,
 
   async load() {
@@ -27,6 +27,8 @@ const Prefs = {
   setLocation(name, lat, lon) { this._d.locName = name; this._d.lat = lat; this._d.lon = lon; this._save(); },
   get stops() { return this._d.stops || []; },
   set stops(v) { this._d.stops = v; this._save(); },
+  get shuttles() { return this._d.shuttles || []; },
+  set shuttles(v) { this._d.shuttles = v; this._save(); },
 };
 
 const Board = {

@@ -58,6 +58,7 @@ function tick() {
     `${d.getMonth() + 1}월 ${d.getDate()}일 ${DOW[d.getDay()]}요일`;
   document.getElementById('updated').textContent = state.updated;
   for (const l of state.live) l.el.textContent = Board.etaShort(l.eta, l.fetchedAt, l.withSec, now);
+  renderShuttle();
   if (now - state.lastBusFetch > 30000) refreshBuses();
   const wInterval = state.weather ? 15 * 60000 : 60000;
   if (now - state.lastWeatherFetch > wInterval) refreshWeather();
@@ -181,6 +182,66 @@ function busRow(a, fetchedAt, now) {
   return row;
 }
 
+// ───────── 셔틀 렌더 ─────────
+function dayLabel(d) { return d === 'weekday' ? '평일' : d === 'weekend' ? '주말' : '매일'; }
+
+function isServiceDay(s, now) {
+  const day = new Date(now).getDay();
+  const wd = day >= 1 && day <= 5;
+  if (!s.days || s.days === 'daily') return true;
+  if (s.days === 'weekday') return wd;
+  if (s.days === 'weekend') return !wd;
+  return true;
+}
+
+function upcomingTimes(s, now, count) {
+  if (!isServiceDay(s, now)) return [];
+  const d = new Date(now);
+  const nowSec = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
+  return (s.times || [])
+    .map(t => { const [h, m] = t.split(':').map(Number); return { hm: t, abs: h * 3600 + m * 60 }; })
+    .filter(x => !isNaN(x.abs))
+    .sort((a, b) => a.abs - b.abs)
+    .map(x => ({ hm: x.hm, secs: x.abs - nowSec }))
+    .filter(x => x.secs > 0)
+    .slice(0, count);
+}
+
+function fmtLeft(secs) {
+  if (secs <= 60) return '곧 출발';
+  const m = Math.floor(secs / 60);
+  if (m < 60) return `${m}분 후`;
+  return `${Math.floor(m / 60)}시간 ${m % 60}분 후`;
+}
+
+function renderShuttle() {
+  const card = document.getElementById('shuttleCard');
+  const shuttles = Prefs.shuttles;
+  if (!shuttles.length) { card.hidden = true; return; }
+  card.hidden = false;
+  const list = document.getElementById('shuttleList');
+  list.innerHTML = '';
+  const now = Date.now();
+  for (const s of shuttles) {
+    const item = el('div', 'shuttle-item');
+    item.appendChild(el('div', 'shuttle-name', s.name + (s.days && s.days !== 'daily' ? ` · ${dayLabel(s.days)}` : '')));
+    const times = el('div', 'shuttle-times');
+    const nexts = upcomingTimes(s, now, 2);
+    if (!nexts.length) {
+      times.appendChild(el('div', 'shuttle-empty', isServiceDay(s, now) ? '오늘 운행 종료' : '오늘 운행 안 함'));
+    } else {
+      for (const n of nexts) {
+        const cell = el('div', 'shuttle-time' + (n.secs <= 300 ? ' soon' : ''));
+        cell.appendChild(el('div', 'hm', n.hm));
+        cell.appendChild(el('div', 'left', fmtLeft(n.secs)));
+        times.appendChild(cell);
+      }
+    }
+    item.appendChild(times);
+    list.appendChild(item);
+  }
+}
+
 // ───────── 설정 패널 ─────────
 function openSettings() {
   renderSettings();
@@ -256,6 +317,62 @@ function renderSettings() {
   c3.appendChild(lookRow);
   c3.appendChild(lookBox);
   root.appendChild(c3);
+
+  // ④ 셔틀 (직접 추가)
+  const c4 = scard('④ 셔틀 (시간표 직접 추가)');
+  c4.appendChild(desc('셔틀 노선 자동목록은 로그인 토큰이 필요해 미지원이에요. 여기에 이름·출발시각을 직접 넣으면, 보드 맨 위에 지금 시간 기준 다음 2대가 떠요.'));
+  const shList = el('div'); c4.appendChild(shList);
+  renderShuttleList(shList);
+
+  c4.appendChild(el('h2', null, '셔틀 추가')); c4.lastChild.style.marginTop = '14px';
+  const shName = input('노선 이름 (예: 퇴근 순환셔틀)');
+  c4.appendChild(shName);
+  const shTimes = input('출발 시각 (쉼표, 예: 17:30, 18:00, 18:30, 19:00)');
+  c4.appendChild(shTimes);
+  let shDays = 'weekday';
+  const dayRow = el('div'); dayRow.style.marginTop = '4px';
+  const dc = {};
+  for (const [val, label] of [['weekday', '평일'], ['daily', '매일'], ['weekend', '주말']]) {
+    const b = chip(label, val === shDays);
+    b.onclick = () => { shDays = val; for (const k in dc) dc[k].classList.toggle('on', k === val); };
+    dc[val] = b; dayRow.appendChild(b);
+  }
+  c4.appendChild(dayRow);
+  c4.appendChild(btn('셔틀 저장', () => {
+    const name = shName.value.trim();
+    const times = normalizeTimes(shTimes.value);
+    if (!name) { toast(c4, '이름을 넣어주세요'); return; }
+    if (!times.length) { toast(c4, '시각을 넣어주세요 (예: 17:30, 18:00)'); return; }
+    Prefs.shuttles = [...Prefs.shuttles, { name, times, days: shDays }];
+    shName.value = ''; shTimes.value = '';
+    renderShuttleList(shList); renderShuttle();
+    toast(c4, '추가했어요 ✓');
+  }));
+  root.appendChild(c4);
+}
+
+function renderShuttleList(container) {
+  container.innerHTML = '';
+  const sh = Prefs.shuttles;
+  if (!sh.length) { container.appendChild(el('div', 'muted', '추가된 셔틀이 없어요')); return; }
+  sh.forEach((s, i) => {
+    const item = el('div', 'stop-item');
+    const col = el('div', 'col');
+    col.appendChild(el('div', 'nm', `${s.name} · ${dayLabel(s.days)}`));
+    col.appendChild(el('div', 'rt', (s.times || []).join(', ')));
+    item.appendChild(col);
+    item.appendChild(smallBtn('삭제', () => { Prefs.shuttles = Prefs.shuttles.filter((_, j) => j !== i); renderShuttleList(container); renderShuttle(); }));
+    container.appendChild(item);
+  });
+}
+
+function normalizeTimes(str) {
+  return str.split(',').map(t => t.trim()).filter(Boolean).map(t => {
+    const m = t.match(/^(\d{1,2}):(\d{1,2})$/);
+    if (!m) return null;
+    const h = Math.min(23, parseInt(m[1])), mi = Math.min(59, parseInt(m[2]));
+    return String(h).padStart(2, '0') + ':' + String(mi).padStart(2, '0');
+  }).filter(Boolean);
 }
 
 function renderStopList(container) {
@@ -359,8 +476,9 @@ function locText() { return Prefs.lat == null ? '아직 위치가 없어요' : `
   backdrop.start();
   document.getElementById('gearBtn').onclick = openSettings;
   document.getElementById('busCard').onclick = () => { state.lastBusFetch = 0; refreshBuses(); };
+  document.getElementById('shuttleCard').onclick = openSettings;
   tick();
-  renderWeather(); renderBuses();
+  renderWeather(); renderBuses(); renderShuttle();
   refreshWeather(); refreshBuses();
   setInterval(tick, 1000);
 })();

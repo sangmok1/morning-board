@@ -43,7 +43,7 @@ const BusApi = {
   async _get(url) {
     const res = await fetch(url);
     if (res.status === 401 || res.status === 403)
-      throw new BusError(`API 키 인증 실패(HTTP ${res.status}). data.go.kr에서 이 버스 서비스 활용신청 승인 여부·키를 확인하세요(승인 직후면 1~2시간 뒤 적용).`);
+      throw new BusError(`요청 거부(HTTP ${res.status}) — 키 미승인(이 서비스 활용신청 확인)이거나 일일 트래픽 초과(개발계정 1000회/일)일 수 있어요.`);
     const body = await res.text();
     if (!res.ok && !body) throw new Error('HTTP ' + res.status);
     return body;
