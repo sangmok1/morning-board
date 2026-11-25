@@ -33,11 +33,12 @@ body {
 
 #backdrop { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
 
-/* 펼침(다 보기) 모드: 글씨·아이콘·날씨를 축소해 전부 한 화면(600px)에 (가로 460 고정) */
-body.full #app { overflow-y: auto; }           /* 그래도 넘치면 스크롤 */
+/* 펼침(다 보기) 모드: 축소 + 내용 높이에 맞춰 팝업이 반응형으로 작아짐(최대 600, 넘으면 스크롤) */
+html.full, body.full { height: auto; min-height: 0; max-height: 600px; }
+body.full #app { height: auto; min-height: 0; max-height: 600px; overflow-y: auto; }
 body.full #app::-webkit-scrollbar { width: 0; }
 body.full #backdrop { position: fixed; }
-body.full .board { height: auto; min-height: 100%; gap: 6px; padding: 8px 14px 9px; }
+body.full .board { height: auto; min-height: 0; gap: 6px; padding: 8px 14px 9px; }
 body.full .bus-list { max-height: none; }
 body.full .weather { flex: 0 0 auto; overflow: visible; min-height: 0; }
 

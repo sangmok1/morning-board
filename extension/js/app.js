@@ -521,6 +521,7 @@ function seedShuttles() {
   const expandBtn = document.getElementById('expandBtn');
   const applyFull = () => {
     document.body.classList.toggle('full', Prefs.fullMode);
+    document.documentElement.classList.toggle('full', Prefs.fullMode);
     expandBtn.textContent = Prefs.fullMode ? '⤡' : '⤢';
     expandBtn.title = Prefs.fullMode ? '접기' : '펼치기';
   };
