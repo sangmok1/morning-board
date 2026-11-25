@@ -37,8 +37,8 @@ body {
   position: relative; z-index: 1;
   height: 100%;
   display: flex; flex-direction: column;
-  padding: 14px 16px 16px;
-  gap: 12px;
+  padding: 12px 16px 14px;
+  gap: 10px;
 }
 
 /* ── 헤더 ── */
@@ -67,23 +67,23 @@ body {
 
 /* ── 날씨 ── */
 .w-top { display: flex; align-items: center; }
-.w-top .col { padding-left: 14px; }
-.w-temp { font-size: 40px; font-weight: 800; line-height: 1; }
-.w-desc { font-size: 14px; color: var(--sub); margin-top: 3px; }
-.w-minmax { font-size: 12px; color: var(--dim); margin-top: 2px; }
-.section-label { font-size: 12px; color: var(--sub); margin: 10px 0 5px; }
+.w-top .col { padding-left: 12px; }
+.w-temp { font-size: 32px; font-weight: 800; line-height: 1; }
+.w-desc { font-size: 13px; color: var(--sub); margin-top: 2px; }
+.w-minmax { font-size: 12px; color: var(--dim); margin-top: 1px; }
+.section-label { font-size: 12px; color: var(--sub); margin: 7px 0 4px; }
 .outfit-row { display: flex; gap: 10px; align-items: flex-start; }
 .outfit-cell { display: flex; flex-direction: column; align-items: center; }
 .outfit-cell .label { font-size: 11px; margin-top: 3px; color: var(--sub); }
 .outfit-head { margin-left: auto; text-align: right; align-self: center; }
-.headline { font-size: 18px; font-weight: 800; color: var(--accent); }
+.headline { font-size: 17px; font-weight: 800; color: var(--accent); }
 .tip { font-size: 12px; margin-top: 2px; color: var(--text); }
 .w-scroll { }
-.w-empty { display: flex; align-items: center; justify-content: center; padding: 28px 0; color: var(--sub); font-size: 15px; }
+.w-empty { display: flex; align-items: center; justify-content: center; padding: 24px 0; color: var(--sub); font-size: 15px; }
 
 /* 주간 */
-.week { margin-top: 8px; }
-.week-row { display: flex; justify-content: space-around; background: var(--card2); border-radius: 16px; padding: 7px 2px; }
+.week { margin-top: 6px; }
+.week-row { display: flex; justify-content: space-around; background: var(--card2); border-radius: 14px; padding: 5px 2px; }
 .week-cell { display: flex; flex-direction: column; align-items: center; flex: 1; gap: 1px; }
 .week-dow { font-size: 11px; font-weight: 700; }
 .week-temps { display: flex; align-items: baseline; gap: 2px; }
@@ -94,14 +94,14 @@ body {
 /* ── 버스 ── */
 .bus-title { display: flex; align-items: center; font-size: 15px; font-weight: 700; color: var(--sub); }
 .bus-title .hint { margin-left: auto; font-size: 11px; color: var(--dim); font-weight: 400; }
-.bus-list { margin-top: 6px; overflow-y: auto; flex: 1; min-height: 0; }
+.bus-list { margin-top: 5px; overflow-y: auto; flex: 1; min-height: 0; }
 .bus-list::-webkit-scrollbar { width: 0; }
-.bus-stopname { font-size: 13px; font-weight: 700; color: var(--sub); padding: 8px 2px 2px; }
+.bus-stopname { font-size: 13px; font-weight: 700; color: var(--sub); padding: 6px 2px 2px; }
 .bus-empty { font-size: 14px; color: var(--dim); padding: 10px 2px; }
 .bus-err { font-size: 13px; color: var(--red); padding: 4px 2px; }
-.bus-row { display: flex; align-items: center; gap: 10px; background: var(--card2); border-radius: 16px; padding: 9px 13px; margin-top: 7px; }
-.bus-route { width: 84px; }
-.bus-route .no { font-size: 22px; font-weight: 800; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bus-row { display: flex; align-items: center; gap: 10px; background: var(--card2); border-radius: 15px; padding: 8px 12px; margin-top: 6px; }
+.bus-route { width: 80px; }
+.bus-route .no { font-size: 20px; font-weight: 800; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bus-route .dest { font-size: 10px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bus-eta { flex: 1; }
 .bus-eta .main { font-size: 21px; font-weight: 800; color: var(--accent); }

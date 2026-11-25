@@ -77,7 +77,7 @@ function renderWeather() {
     return;
   }
   const top = el('div', 'w-top');
-  top.appendChild(makeSpriteCanvas(iconFor(w.code, w.isDay), 64, { tile: true }));
+  top.appendChild(makeSpriteCanvas(iconFor(w.code, w.isDay), 52, { tile: true }));
   const col = el('div', 'col');
   col.appendChild(el('div', 'w-temp', `${Math.round(w.temp)}°`));
   col.appendChild(el('div', 'w-desc', `${WeatherApi.desc(w.code)} · 체감 ${Math.round(w.feels)}°`));
@@ -90,7 +90,7 @@ function renderWeather() {
   const row = el('div', 'outfit-row');
   for (const item of outfit.items) {
     const cell = el('div', 'outfit-cell');
-    cell.appendChild(makeSpriteCanvas(item.s, 52, { tile: true }));
+    cell.appendChild(makeSpriteCanvas(item.s, 44, { tile: true }));
     cell.appendChild(el('div', 'label', item.label));
     row.appendChild(cell);
   }
@@ -119,7 +119,7 @@ function renderWeek(days, today) {
     const cell = el('div', 'week-cell');
     const lbl = el('div', 'week-dow', isToday ? '오늘' : DOW[dow]); lbl.style.color = color;
     cell.appendChild(lbl);
-    cell.appendChild(makeSpriteCanvas(iconFor(d.code), 30, { tile: false }));
+    cell.appendChild(makeSpriteCanvas(iconFor(d.code), 26, { tile: false }));
     const temps = el('div', 'week-temps');
     temps.appendChild(el('span', 'week-max', `${Math.round(d.max)}°`));
     temps.appendChild(el('span', 'week-min', `${Math.round(d.min)}°`));
