@@ -77,6 +77,21 @@ function renderWeather() {
     card.appendChild(el('div', 'w-empty', state.weatherError || '날씨 불러오는 중…'));
     return;
   }
+  // 펼침(다 보기) 모드: 날씨를 한 줄 미니로 (공간 절약 → 버스 더 많이 노스크롤)
+  if (Prefs.fullMode) {
+    const outfit = WeatherApi.outfit(w);
+    const mini = el('div', 'w-mini');
+    mini.appendChild(makeSpriteCanvas(iconFor(w.code, w.isDay), 30, { tile: true }));
+    const txt = el('div', 'w-mini-txt');
+    txt.appendChild(el('span', 't', `${Math.round(w.temp)}°`));
+    txt.appendChild(el('span', 'd', `${WeatherApi.desc(w.code)} · 체감 ${Math.round(w.feels)}° · ${outfit.items.map(i => i.label).join(' · ')}`));
+    mini.appendChild(txt);
+    card.appendChild(mini);
+    const todayF = new Date().toISOString().slice(0, 10);
+    const weekF = w.week.filter(d => d.date >= todayF).slice(0, 7);
+    if (weekF.length) card.appendChild(renderWeek(weekF, todayF));
+    return;
+  }
   const top = el('div', 'w-top');
   top.appendChild(makeSpriteCanvas(iconFor(w.code, w.isDay), 52, { tile: true }));
   const col = el('div', 'col');
@@ -225,19 +240,34 @@ function renderShuttle() {
   for (const s of shuttles) {
     const item = el('div', 'shuttle-item');
     item.appendChild(el('div', 'shuttle-name', s.name + (s.days && s.days !== 'daily' ? ` · ${dayLabel(s.days)}` : '')));
-    const times = el('div', 'shuttle-times');
     const nexts = upcomingTimes(s, now, 2);
-    if (!nexts.length) {
-      times.appendChild(el('div', 'shuttle-empty', isServiceDay(s, now) ? '오늘 운행 종료' : '오늘 운행 안 함'));
+    const noneMsg = isServiceDay(s, now) ? '오늘 운행 종료' : '오늘 운행 안 함';
+    if (Prefs.fullMode) {
+      // 펼침 모드: 한 줄 compact (18:00 (7분) · 18:06 (13분))
+      const line = el('div', 'shuttle-mini');
+      const shortLeft = (secs) => {
+        if (secs <= 60) return '곧';
+        const m = Math.floor(secs / 60);
+        return m < 60 ? `${m}분` : `${Math.floor(m / 60)}시간${m % 60 ? m % 60 + '분' : ''}`;
+      };
+      line.textContent = nexts.length
+        ? nexts.map(n => `${n.hm} (${shortLeft(n.secs)})`).join('    ·    ')
+        : noneMsg;
+      item.appendChild(line);
     } else {
-      for (const n of nexts) {
-        const cell = el('div', 'shuttle-time' + (n.secs <= 300 ? ' soon' : ''));
-        cell.appendChild(el('div', 'hm', n.hm));
-        cell.appendChild(el('div', 'left', fmtLeft(n.secs)));
-        times.appendChild(cell);
+      const times = el('div', 'shuttle-times');
+      if (!nexts.length) {
+        times.appendChild(el('div', 'shuttle-empty', noneMsg));
+      } else {
+        for (const n of nexts) {
+          const cell = el('div', 'shuttle-time' + (n.secs <= 300 ? ' soon' : ''));
+          cell.appendChild(el('div', 'hm', n.hm));
+          cell.appendChild(el('div', 'left', fmtLeft(n.secs)));
+          times.appendChild(cell);
+        }
       }
+      item.appendChild(times);
     }
-    item.appendChild(times);
     list.appendChild(item);
   }
 }
@@ -488,6 +518,14 @@ function seedShuttles() {
   document.getElementById('gearBtn').onclick = openSettings;
   document.getElementById('busCard').onclick = () => { state.lastBusFetch = 0; refreshBuses(); };
   document.getElementById('shuttleCard').onclick = openSettings;
+  const expandBtn = document.getElementById('expandBtn');
+  const applyFull = () => {
+    document.body.classList.toggle('full', Prefs.fullMode);
+    expandBtn.textContent = Prefs.fullMode ? '⤡' : '⤢';
+    expandBtn.title = Prefs.fullMode ? '접기' : '펼치기';
+  };
+  expandBtn.onclick = () => { Prefs.fullMode = !Prefs.fullMode; applyFull(); renderWeather(); };
+  applyFull();
   tick();
   renderWeather(); renderBuses(); renderShuttle();
   refreshWeather(); refreshBuses();

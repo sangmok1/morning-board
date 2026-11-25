@@ -29,6 +29,8 @@ const Prefs = {
   set stops(v) { this._d.stops = v; this._save(); },
   get shuttles() { return this._d.shuttles || []; },
   set shuttles(v) { this._d.shuttles = v; this._save(); },
+  get fullMode() { return !!this._d.fullMode; },
+  set fullMode(v) { this._d.fullMode = !!v; this._save(); },
 };
 
 const Board = {
