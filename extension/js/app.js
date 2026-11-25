@@ -470,8 +470,19 @@ function toast(container, msg) { const t = el('div', 'ok', msg); container.appen
 function locText() { return Prefs.lat == null ? '아직 위치가 없어요' : `현재: ${Prefs.locName || '지정 위치'}  (${Prefs.lat.toFixed(3)}, ${Prefs.lon.toFixed(3)})`; }
 
 // ───────── 시작 ─────────
+// 최초 1회 회사 셔틀 기본값 시드 (CJ ENM센터 기점). 삭제하면 다시 안 생김.
+function seedShuttles() {
+  if (Prefs.shuttles.length || Prefs._d.shuttleSeeded) return;
+  Prefs._d.shuttleSeeded = true;
+  Prefs.shuttles = [
+    { name: '순환셔틀(퇴근)', days: 'weekday', times: ['18:00', '18:06', '18:12', '18:18', '18:25', '18:30', '18:35', '18:40', '18:45', '18:50', '18:55', '18:59', '19:03', '19:07', '19:11', '19:15', '19:19', '19:23', '19:28', '19:33', '19:38', '19:43', '19:48', '19:54', '20:00'] },
+    { name: '분당 셔틀(퇴근)', days: 'daily', times: ['19:30'] },
+  ];
+}
+
 (async function init() {
   await Prefs.load();
+  seedShuttles();
   backdrop = new WeatherBackdrop(document.getElementById('backdrop'));
   backdrop.start();
   document.getElementById('gearBtn').onclick = openSettings;
